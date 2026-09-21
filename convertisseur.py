@@ -8,7 +8,6 @@ if sys.stderr is None:
 
 from pathlib import Path
 from pdf2docx import Converter
-from spire.doc import Document, FileFormat
 import subprocess
 import ctypes
 
@@ -26,6 +25,17 @@ def afficher_notification(nom_fichier):
         subprocess.Popen(["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_cmd], creationflags=0x08000000)
     except Exception:
         pass
+
+def trouver_soffice():
+    chemins = [
+        Path(os.environ.get("PROGRAMFILES", "")) / "LibreOffice/program/soffice.exe",
+        Path(os.environ.get("PROGRAMFILES(X86)", "")) / "LibreOffice/program/soffice.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/LibreOffice/program/soffice.exe"
+    ]
+    for c in chemins:
+        if c.exists():
+            return str(c)
+    return None
 
 def lancer_conversion(file_path_str):
     p = Path(file_path_str)
@@ -46,15 +56,24 @@ def lancer_conversion(file_path_str):
 
     elif ext == ".docx":
         out_path = p.with_suffix(".pdf")
-        try:
-            # Conversion autonome sans Microsoft Word
-            doc = Document()
-            doc.LoadFromFile(str(p))
-            doc.SaveToFile(str(out_path), FileFormat.PDF)
-            doc.Close()
-            afficher_notification(out_path.name)
-        except Exception as e:
-            ctypes.windll.user32.MessageBoxW(0, f"Erreur DOCX : {e}", "Erreur", 0x10)
+        soffice = trouver_soffice()
+        
+        if soffice:
+            try:
+                # Exécution 100% invisible en arrière-plan
+                cmd = [soffice, "--headless", "--convert-to", "pdf", str(p), "--outdir", str(p.parent)]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000, check=True)
+                afficher_notification(out_path.name)
+            except Exception as e:
+                ctypes.windll.user32.MessageBoxW(0, f"Erreur DOCX : {e}", "Erreur", 0x10)
+        else:
+            # Si ni LibreOffice ni Word ne sont trouvés
+            ctypes.windll.user32.MessageBoxW(
+                0, 
+                "Moteur bureautique introuvable pour convertir le DOCX en PDF.\nInstallez LibreOffice ou Microsoft Word.", 
+                "Moteur manquant", 
+                0x30
+            )
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
