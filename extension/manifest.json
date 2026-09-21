@@ -1,0 +1,17 @@
+﻿{
+  "manifest_version": 3,
+  "name": "Convertisseur Universel (PDF / DOCX)",
+  "version": "1.0",
+  "description": "Convertir instantanément des documents PDF et Word directement depuis le navigateur.",
+  "permissions": [
+    "nativeMessaging",
+    "contextMenus",
+    "downloads"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Convertisseur Universel"
+  }
+}
