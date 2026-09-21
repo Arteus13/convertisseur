@@ -7,9 +7,10 @@ if sys.stderr is None:
     sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 from pathlib import Path
-from pdf2docx import Converter
 import subprocess
 import ctypes
+import pythoncom
+import win32com.client
 
 def afficher_notification(nom_fichier):
     ps_cmd = f"""
@@ -26,19 +27,37 @@ def afficher_notification(nom_fichier):
     except Exception:
         pass
 
-def trouver_soffice():
-    chemins = [
-        Path(os.environ.get("PROGRAMFILES", "")) / "LibreOffice/program/soffice.exe",
-        Path(os.environ.get("PROGRAMFILES(X86)", "")) / "LibreOffice/program/soffice.exe",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/LibreOffice/program/soffice.exe"
-    ]
-    for c in chemins:
-        if c.exists():
-            return str(c)
-    return None
+def convertir_docx_vers_pdf_natif(docx_path, pdf_path):
+    # Initialisation obligatoire du thread COM pour les binaires compiles
+    pythoncom.CoInitialize()
+    word = None
+    doc = None
+    try:
+        # Constante wdExportFormatPDF = 17
+        word = win32com.client.DispatchEx("Word.Application")
+        word.Visible = False
+        word.DisplayAlerts = 0
+        doc = word.Documents.Open(str(docx_path), ReadOnly=True)
+        # 17 = wdFormatPDF
+        doc.SaveAs(str(pdf_path), FileFormat=17)
+        return True
+    except Exception as e:
+        raise e
+    finally:
+        if doc is not None:
+            try:
+                doc.Close(SaveChanges=0)
+            except Exception:
+                pass
+        if word is not None:
+            try:
+                word.Quit()
+            except Exception:
+                pass
+        pythoncom.CoUninitialize()
 
 def lancer_conversion(file_path_str):
-    p = Path(file_path_str)
+    p = Path(file_path_str).resolve()
     if not p.exists():
         return
 
@@ -47,6 +66,7 @@ def lancer_conversion(file_path_str):
     if ext == ".pdf":
         out_path = p.with_suffix(".docx")
         try:
+            from pdf2docx import Converter
             cv = Converter(str(p))
             cv.convert(str(out_path))
             cv.close()
@@ -56,24 +76,12 @@ def lancer_conversion(file_path_str):
 
     elif ext == ".docx":
         out_path = p.with_suffix(".pdf")
-        soffice = trouver_soffice()
-        
-        if soffice:
-            try:
-                # Exécution 100% invisible en arrière-plan
-                cmd = [soffice, "--headless", "--convert-to", "pdf", str(p), "--outdir", str(p.parent)]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000, check=True)
+        try:
+            convertir_docx_vers_pdf_natif(p, out_path)
+            if out_path.exists():
                 afficher_notification(out_path.name)
-            except Exception as e:
-                ctypes.windll.user32.MessageBoxW(0, f"Erreur DOCX : {e}", "Erreur", 0x10)
-        else:
-            # Si ni LibreOffice ni Word ne sont trouvés
-            ctypes.windll.user32.MessageBoxW(
-                0, 
-                "Moteur bureautique introuvable pour convertir le DOCX en PDF.\nInstallez LibreOffice ou Microsoft Word.", 
-                "Moteur manquant", 
-                0x30
-            )
+        except Exception as e:
+            ctypes.windll.user32.MessageBoxW(0, f"Erreur DOCX : {e}", "Erreur", 0x10)
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
