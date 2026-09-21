@@ -1,17 +1,10 @@
-﻿import sys
+import sys
 import os
 import json
 import struct
 import subprocess
 
-# Fix streams
-if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w", encoding="utf-8")
-if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w", encoding="utf-8")
-
 def read_message():
-    # Chrome envoie 4 octets pour la longueur du message JSON
     raw_length = sys.stdin.buffer.read(4)
     if len(raw_length) == 0:
         sys.exit(0)
@@ -34,9 +27,14 @@ if __name__ == "__main__":
             exe_path = os.path.join(local_app_data, "Programs", "ConvertisseurUniversel", "convertisseur.exe")
             
             if os.path.exists(exe_path):
-                subprocess.Popen([exe_path, file_path])
+                subprocess.Popen([exe_path, file_path], creationflags=0x08000000)
                 send_message({"status": "success", "file": file_path})
             else:
                 send_message({"status": "error", "message": "convertisseur.exe non installe"})
+        else:
+            send_message({"status": "error", "message": "Fichier introuvable"})
     except Exception as e:
-        pass
+        try:
+            send_message({"status": "error", "message": str(e)})
+        except Exception:
+            pass
